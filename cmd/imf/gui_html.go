@@ -137,9 +137,9 @@ body{font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sa
     </div>
   </div>
   <div class="launch-key-section">
-    <span id="keyStatus" class="status">No signing key loaded</span>
-    <button class="lkb" onclick="doKeygen()">Generate Key</button>
-    <button class="lkb" onclick="document.getElementById('keyFile').click()">Load Key</button>
+    <span id="keyStatus" class="status">Key auto-generated on seal</span>
+    <button class="lkb" onclick="document.getElementById('keyFile').click()">Import Existing Key</button>
+    <button class="lkb" onclick="exportKey()" id="exportBtn" style="display:none">Export Key</button>
     <input type="file" id="keyFile" accept=".pem" style="display:none" onchange="doLoadKey(this.files[0])">
   </div>
 </div>
@@ -160,7 +160,7 @@ body{font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sa
   <div class="modal">
     <h2>Seal Container</h2>
     <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">Once sealed, no files can be added or modified. This is permanent.</p>
-    <div class="seal-check"><input type="checkbox" id="sealEmbed" checked><label for="sealEmbed">Embed public key (self-verifying)</label></div>
+    <div style="font-size:12px;color:var(--text-faint);margin:8px 0">Public key is always embedded for self-verification.</div>
     <label>Encryption Passphrase (optional)</label>
     <input type="password" id="sealPass" placeholder="Leave blank to skip encryption">
     <label>Expiration Date (optional)</label>
@@ -243,14 +243,14 @@ async function doCreate(){
 
 async function doKeygen(){
   const r=await pf('/api/keygen',{});
-  if(r.success){toast('Key pair generated','success');setKey(true,'Private key loaded')}
+  if(r.success){toast('Key pair generated','success');setKey(true,'Key ready');document.getElementById('exportBtn').style.display='';}
   else toast(r.error,'error');
 }
 async function doLoadKey(file){
   if(!file)return;
   const f=new FormData();f.append('key',file);
   const r=await(await fetch('/api/load-key',{method:'POST',body:f})).json();
-  if(r.success){toast(r.message,'success');setKey(true,r.message)}
+  if(r.success){toast(r.message,'success');setKey(true,r.message);document.getElementById('exportBtn').style.display='';}
   else toast(r.error,'error');
 }
 function setKey(ok,txt){const e=document.getElementById('keyStatus');e.textContent=txt;e.className='status'+(ok?' loaded':'')}
@@ -431,30 +431,20 @@ function setupDrop(){
 // Seal
 async function doSeal(){
   if(!files.length){toast('Add files first','error');return}
-  // Check if a signing key is loaded
+  // Auto-generate signing key if none loaded — no prompt, just do it
   try{
     const ks=await(await fetch('/api/key-status')).json();
     if(!ks.data.loaded){
-      // Show key prompt modal
-      const gen=await showKeyPrompt();
-      if(gen){
-        const kr=await fetch('/api/keygen',{method:'POST'});
-        const kd=await kr.json();
-        if(kd.success){toast('Signing key auto-generated','success');}
-        else{toast('Key generation failed: '+kd.error,'error');return;}
-      }else{
-        hideModal('sealModal');
-        toast('A signing key is required to seal — redirecting to start','info');
-        document.getElementById('workspace').classList.remove('active');
-        document.getElementById('landing').classList.add('active');
-        return;
-      }
+      const kr=await fetch('/api/keygen',{method:'POST'});
+      const kd=await kr.json();
+      if(!kd.success){toast('Key generation failed: '+kd.error,'error');return;}
+      setKey(true,'Key auto-generated');
     }
-  }catch(e){console.error('Key status check failed',e);}
+  }catch(e){console.error('Key check failed',e);}
   const r=await pf('/api/seal',{
     container:cName,passphrase:document.getElementById('sealPass').value,
     expires:document.getElementById('sealExp').value,
-    embed_key:document.getElementById('sealEmbed').checked?'true':'false'
+    embed_key:'true'
   });
   if(r.success){
     cState='sealed';hideModal('sealModal');toast('Container sealed','success');
@@ -468,26 +458,9 @@ async function doSeal(){
   }else toast(r.error,'error');
 }
 
-// Key prompt modal
-function showKeyPrompt(){
-  return new Promise(resolve=>{
-    const o=document.createElement('div');
-    o.className='modal-overlay active';
-    o.style.zIndex='1001';
-    o.innerHTML='<div class="modal">'+
-      '<h2>&#128273; No Signing Key</h2>'+
-      '<p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">'+
-      'A signing key is required to seal the container. The key cryptographically signs the manifest to guarantee integrity.</p>'+
-      '<p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">'+
-      'Would you like to generate an Ed25519 key pair automatically?</p>'+
-      '<div class="modal-btns">'+
-        '<button class="btn btn-secondary" id="kpNo">Go Back</button>'+
-        '<button class="btn btn-primary" id="kpYes">&#10003; Generate Key</button>'+
-      '</div></div>';
-    document.body.appendChild(o);
-    document.getElementById('kpYes').onclick=()=>{o.remove();resolve(true)};
-    document.getElementById('kpNo').onclick=()=>{o.remove();resolve(false)};
-  });
+// Export signing key as downloadable .pem file
+async function exportKey(){
+  window.location.href='/api/export-key';
 }
 
 // Verify

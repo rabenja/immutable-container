@@ -94,6 +94,7 @@ func runGUI() {
 	mux.HandleFunc("/api/anchor", handleAnchor)
 	mux.HandleFunc("/api/anchor-verify", handleAnchorVerify)
 	mux.HandleFunc("/api/workdir", handleWorkDir)
+	mux.HandleFunc("/api/export-key", handleExportKey)
 
 	// Find an available port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -145,16 +146,10 @@ func handleKeygen(w http.ResponseWriter, r *http.Request) {
 	state.PublicKey = kp.PublicKey
 	state.KeyLoaded = true
 
-	// Save keys to work directory.
-	privPath := filepath.Join(state.WorkDir, "imf_private.pem")
-	pubPath := filepath.Join(state.WorkDir, "imf_public.pem")
-	os.WriteFile(privPath, imfcrypto.MarshalPrivateKeyPEM(kp.PrivateKey), 0600)
-	os.WriteFile(pubPath, imfcrypto.MarshalPublicKeyPEM(kp.PublicKey), 0644)
+	// Keys stay in memory — no .pem files written to disk.
+	// Users can export explicitly via /api/export-key if needed.
 
-	jsonSuccess(w, "Key pair generated", map[string]string{
-		"private_key_path": privPath,
-		"public_key_path":  pubPath,
-	})
+	jsonSuccess(w, "Key pair generated", nil)
 }
 
 // handleKeyStatus returns whether a signing key is currently loaded.
@@ -701,6 +696,19 @@ func handleAnchorVerify(w http.ResponseWriter, r *http.Request) {
 // show users where their .imf files are saved.
 func handleWorkDir(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, "", map[string]string{"path": state.WorkDir})
+}
+
+// handleExportKey downloads the private key as a .pem file.
+// This is the only way keys leave memory — the user must explicitly request it.
+func handleExportKey(w http.ResponseWriter, r *http.Request) {
+	if state.PrivateKey == nil {
+		http.Error(w, "No key to export", 400)
+		return
+	}
+	pemData := imfcrypto.MarshalPrivateKeyPEM(state.PrivateKey)
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"imf_private.pem\"")
+	w.Write(pemData)
 }
 
 // resolveContainer determines the container path from a request.
