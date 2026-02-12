@@ -12,6 +12,10 @@ import (
 	"github.com/immutable-container/imf/pkg/container"
 )
 
+// runInfo handles the "imf info" command.
+// Displays metadata about a container: state (open/sealed), creation and seal
+// timestamps, expiration status, encryption status, embedded key presence,
+// and file count. Does not require decryption or key access.
 func runInfo() {
 	fs := flag.NewFlagSet("imf info", flag.ExitOnError)
 	fs.Parse(os.Args[1:])

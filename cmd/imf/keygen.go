@@ -12,6 +12,11 @@ import (
 	imfcrypto "github.com/immutable-container/imf/pkg/crypto"
 )
 
+// runKeygen handles the "imf keygen" command.
+// Generates a new Ed25519 key pair and saves it as PEM files:
+//   - imf_private.pem (mode 0600) — used for signing during seal
+//   - imf_public.pem  (mode 0644) — used for verification
+// The private key should be kept secret; the public key can be shared freely.
 func runKeygen() {
 	fs := flag.NewFlagSet("imf keygen", flag.ExitOnError)
 	outDir := fs.String("out", ".", "Output directory for key files")

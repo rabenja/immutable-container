@@ -11,6 +11,9 @@ import (
 	"github.com/immutable-container/imf/pkg/container"
 )
 
+// runList handles the "imf list" command.
+// Lists all files stored in a container with their names, sizes, and
+// truncated SHA-256 hashes. Works on both open and sealed containers.
 func runList() {
 	fs := flag.NewFlagSet("imf list", flag.ExitOnError)
 	fs.Parse(os.Args[1:])

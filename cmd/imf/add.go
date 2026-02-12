@@ -11,6 +11,10 @@ import (
 	"github.com/immutable-container/imf/pkg/container"
 )
 
+// runAdd handles the "imf add" command.
+// Adds one or more files to an open (unsealed) container. Each file is stored
+// with its original name and a SHA-256 hash recorded in the manifest for
+// integrity verification after sealing. Files cannot be added to a sealed container.
 func runAdd() {
 	fs := flag.NewFlagSet("imf add", flag.ExitOnError)
 	fs.Usage = func() {

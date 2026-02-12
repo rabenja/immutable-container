@@ -186,6 +186,7 @@ body{font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sa
       <div class="sidebar-section" id="sMeta"></div>
       <div class="sidebar-section" id="sVerify"></div>
       <div class="sidebar-section" id="sCrypto"></div>
+      <div class="sidebar-section" id="sAnchor"></div>
     </div>
     <div class="file-area" id="fileArea">
       <div class="file-toolbar" id="fileTB"></div>
@@ -275,6 +276,7 @@ function renderWS(){
       '<input type="file" id="addIn" multiple style="display:none" onchange="addF(this.files)">';
   }else{
     a.innerHTML='<a href="/api/download?file='+encodeURIComponent(cName)+'" class="tb">Download .imf</a>'+
+      '<button class="tb" onclick="anchorContainer()" style="background:var(--warning-bg);color:var(--warning);border-color:var(--warning)">&#9875; Anchor to Bitcoin</button>'+
       '<button class="tb success" onclick="extractDL()">Extract All</button>';
   }
   renderSB();
@@ -297,6 +299,13 @@ function renderSB(){
     mr('Pub Key',cInfo.HasPubKey?'Embedded':'None',cInfo.HasPubKey?'good':'');
   document.getElementById('sVerify').innerHTML='<h4>Integrity</h4>'+
     '<div class="verify-status pending" id="vBadge">'+(cState==='sealed'?'Checking...':'Not yet sealed')+'</div>';
+  // Show blockchain anchor section for sealed containers
+  const aDiv=document.getElementById('sAnchor');
+  if(cState==='sealed'){
+    aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
+      '<div style="font-size:12px;color:var(--text-dim)">Not yet anchored</div>'+
+      '<div style="margin-top:8px;font-size:11px;color:var(--text-faint)">Click "Anchor to Bitcoin" to timestamp this container on the blockchain.</div>';
+  }else{aDiv.innerHTML='';}
 }
 
 function mr(l,v,c){return'<div class="meta-row"><span class="label">'+l+'</span><span class="value'+(c?' '+c:'')+'">'+v+'</span></div>'}
@@ -476,6 +485,28 @@ async function autoVerify(){
   const e=document.getElementById('vBadge');
   if(r.success){e.className='verify-status pass';e.innerHTML='&#10003; Verified'}
   else{e.className='verify-status fail';e.innerHTML='&#10007; '+r.error}
+}
+
+// Anchor to Bitcoin via OpenTimestamps
+async function anchorContainer(){
+  toast('Anchoring to Bitcoin via OpenTimestamps...','info');
+  const f=new FormData();f.append('container',cName);
+  const r=await(await fetch('/api/anchor',{method:'POST',body:f})).json();
+  if(r.success){
+    toast('Anchored to Bitcoin!','success');
+    // Update sidebar with anchor info
+    const aDiv=document.getElementById('sAnchor');
+    if(aDiv){
+      aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
+        mr('Status','Submitted','good')+
+        mr('Hash',r.data.hash.substring(0,16)+'...')+
+        mr('Server',r.data.server.replace('https://',''))+
+        mr('Submitted',new Date(r.data.timestamp).toLocaleString())+
+        '<div style="margin-top:8px"><a href="/api/download?file='+encodeURIComponent(cName+'.ots')+'" class="tb success" style="font-size:11px;padding:4px 10px;text-decoration:none">Download .ots proof</a></div>';
+    }
+  }else{
+    toast('Anchor failed: '+r.error,'error');
+  }
 }
 
 // Helpers

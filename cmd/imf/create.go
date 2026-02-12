@@ -11,6 +11,9 @@ import (
 	"github.com/immutable-container/imf/pkg/container"
 )
 
+// runCreate handles the "imf create" command.
+// Creates a new, empty .imf container file at the specified path.
+// The container starts in an "open" state, ready to accept files via "imf add".
 func runCreate() {
 	fs := flag.NewFlagSet("imf create", flag.ExitOnError)
 	fs.Usage = func() {

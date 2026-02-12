@@ -14,7 +14,16 @@ import (
 	imfcrypto "github.com/immutable-container/imf/pkg/crypto"
 )
 
+// runSeal handles the "imf seal" command.
+// Sealing is the core operation that makes a container immutable:
+//   1. Reads the Ed25519 private key from a PEM file
+//   2. Optionally encrypts all files with AES-256-GCM (if passphrase provided)
+//   3. Computes SHA-256 hashes for every file and records them in the manifest
+//   4. Signs the manifest with the private key (Ed25519)
+//   5. Optionally embeds the public key for self-verification
+//   6. Writes a .sealed marker — after this, no modifications are possible
 func runSeal() {
+	// Parse command-line flags for key path, encryption, expiry, etc.
 	keyPath, embedPub, passphrase, expiresStr, containerPath := parseSealArgs()
 
 	if containerPath == "" {
@@ -27,6 +36,8 @@ func runSeal() {
 		os.Exit(1)
 	}
 
+	// A signing key is always required — it proves authorship and enables
+	// tamper detection via the Ed25519 signature on the manifest.
 	if keyPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: -key is required")
 		os.Exit(1)
@@ -42,6 +53,8 @@ func runSeal() {
 		os.Exit(1)
 	}
 
+	// Prompt for passphrase interactively if not provided via flag.
+	// Use "none" to explicitly skip encryption.
 	pp := passphrase
 	if pp == "" {
 		pp = promptPassphrase("Encryption passphrase (enter to skip): ")
@@ -50,11 +63,15 @@ func runSeal() {
 		pp = ""
 	}
 
+	// Build seal options and execute the seal operation.
 	opts := container.SealOptions{
 		PrivateKey:  privKey,
 		EmbedPubKey: embedPub,
 		Passphrase:  pp,
 	}
+
+	// Parse optional expiration date (RFC3339 format, e.g. "2026-12-31T23:59:59Z").
+	// After expiry, extraction is blocked unless -ignore-expiry is used.
 	if expiresStr != "" {
 		t, err := time.Parse(time.RFC3339, expiresStr)
 		if err != nil {
@@ -69,6 +86,7 @@ func runSeal() {
 		os.Exit(1)
 	}
 
+	// Print summary of what was sealed and how.
 	fmt.Printf("Sealed %s\n", containerPath)
 	if pp != "" {
 		fmt.Println("  Encrypted: yes")
@@ -81,6 +99,7 @@ func runSeal() {
 	}
 }
 
+// promptPassphrase reads a passphrase from stdin with a visible prompt.
 func promptPassphrase(prompt string) string {
 	fmt.Fprint(os.Stderr, prompt)
 	reader := bufio.NewReader(os.Stdin)
@@ -88,6 +107,9 @@ func promptPassphrase(prompt string) string {
 	return strings.TrimSpace(line)
 }
 
+// parseSealArgs manually parses seal command arguments.
+// We use manual parsing instead of flag.FlagSet because the container path
+// is a positional argument mixed with flags.
 func parseSealArgs() (keyPath string, embedPub bool, passphrase string, expiresStr string, containerPath string) {
 	args := os.Args[1:]
 	i := 0

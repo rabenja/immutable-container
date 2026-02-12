@@ -12,6 +12,12 @@ import (
 	imfcrypto "github.com/immutable-container/imf/pkg/crypto"
 )
 
+// runVerify handles the "imf verify" command.
+// Verifies a sealed container's cryptographic integrity by:
+//   1. Checking the Ed25519 signature on the manifest
+//   2. Recomputing SHA-256 hashes for every file and comparing to manifest
+//   3. Checking expiration date (unless -ignore-expiry is set)
+// If -key is omitted and the container has an embedded public key, that key is used.
 func runVerify() {
 	fs := flag.NewFlagSet("imf verify", flag.ExitOnError)
 	keyPath := fs.String("key", "", "Path to Ed25519 public key (PEM). Uses embedded key if omitted.")

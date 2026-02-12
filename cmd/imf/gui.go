@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/immutable-container/imf/pkg/anchor"
 	"github.com/immutable-container/imf/pkg/container"
 	imfcrypto "github.com/immutable-container/imf/pkg/crypto"
 )
@@ -43,6 +44,11 @@ type apiResponse struct {
 	Error   string      `json:"error,omitempty"`
 }
 
+// runGUI starts a local web server that serves the IMF graphical interface.
+// It creates a temporary working directory for the session, registers all
+// REST API routes, finds an available port on localhost, and opens the
+// user's default browser. All operations happen locally — the server only
+// listens on 127.0.0.1 and never exposes data to the network.
 func runGUI() {
 	// Create a temporary working directory for this session.
 	workDir, err := os.MkdirTemp("", "imf-gui-*")
@@ -73,6 +79,7 @@ func runGUI() {
 	mux.HandleFunc("/api/browse", handleBrowse)
 	mux.HandleFunc("/api/serve-file", handleServeFile)
 	mux.HandleFunc("/api/upload-container", handleUploadContainer)
+	mux.HandleFunc("/api/anchor", handleAnchor)
 
 	// Find an available port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -182,6 +189,8 @@ func handleLoadKey(w http.ResponseWriter, r *http.Request) {
 	jsonError(w, "Could not parse key file — must be an IMF PEM key", 400)
 }
 
+// handleCreate creates a new empty .imf container in the session's work directory.
+// Accepts a "name" form field; defaults to "container" if omitted.
 func handleCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonError(w, "Method not allowed", 405)
@@ -210,6 +219,9 @@ func handleCreate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAddFiles accepts multipart file uploads and adds them to the current container.
+// Files are temporarily written to the work directory, then added to the container
+// via the container.Add() library function, which records SHA-256 hashes in the manifest.
 func handleAddFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonError(w, "Method not allowed", 405)
@@ -268,6 +280,9 @@ func handleAddFiles(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, fmt.Sprintf("Added %d file(s)", len(files)), nil)
 }
 
+// handleSeal seals the container using the session's loaded private key.
+// Accepts optional passphrase (for AES-256-GCM encryption), expiration date,
+// and embed_key flag. Once sealed, the container becomes permanently immutable.
 func handleSeal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonError(w, "Method not allowed", 405)
@@ -313,6 +328,9 @@ func handleSeal(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, "Container sealed", nil)
 }
 
+// handleVerify verifies a container's cryptographic integrity.
+// Checks the Ed25519 signature and recomputes all file hashes.
+// Accepts the container via multipart upload or by name in the work directory.
 func handleVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonError(w, "Method not allowed", 405)
@@ -338,6 +356,9 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	jsonSuccess(w, "Signature and integrity verified", nil)
 }
 
+// handleExtract extracts files from a sealed container into the work directory.
+// If encrypted, the correct passphrase must be provided. Extracted files are
+// accessible via the /api/browse and /api/download endpoints.
 func handleExtract(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonError(w, "Method not allowed", 405)
@@ -435,6 +456,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDownloadZip bundles all extracted files into a single ZIP for download.
+// handleDownloadZip bundles all extracted files into a single ZIP archive for download.
+// This provides a convenient way to download all files at once from the GUI.
 func handleDownloadZip(w http.ResponseWriter, r *http.Request) {
 	extractedDir := filepath.Join(state.WorkDir, "extracted")
 	if _, err := os.Stat(extractedDir); os.IsNotExist(err) {
@@ -476,6 +499,8 @@ type fileDetail struct {
 }
 
 // handleBrowse returns detailed file listing for the Finder-style browser.
+// handleBrowse returns metadata for all extracted files (name, size, type, modified date).
+// Powers the Finder-style file browser in the GUI's Extract panel.
 func handleBrowse(w http.ResponseWriter, r *http.Request) {
 	extractedDir := filepath.Join(state.WorkDir, "extracted")
 	if _, err := os.Stat(extractedDir); os.IsNotExist(err) {
@@ -572,6 +597,8 @@ func mimeForExt(ext string) string {
 
 // handleUploadContainer saves an uploaded .imf file to the work directory
 // so subsequent operations can reference it by name.
+// handleUploadContainer accepts an .imf file upload and saves it to the work directory.
+// Used when the user drags an existing container into the GUI for verification or extraction.
 func handleUploadContainer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		jsonError(w, "Method not allowed", 405)
@@ -600,6 +627,37 @@ func handleUploadContainer(w http.ResponseWriter, r *http.Request) {
 // --- Helpers ---
 
 // resolveContainer finds the container path from a form value or uploaded file.
+// handleAnchor submits the container's SHA-256 hash to OpenTimestamps for
+// blockchain anchoring. Returns the hash, proof path, and server used.
+func handleAnchor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonError(w, "Method not allowed", 405)
+		return
+	}
+
+	containerPath, err := resolveContainer(r)
+	if err != nil {
+		jsonError(w, err.Error(), 400)
+		return
+	}
+
+	result, err := anchor.AnchorContainer(containerPath)
+	if err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+
+	jsonSuccess(w, "Anchored to Bitcoin", map[string]string{
+		"hash":      result.ContainerHash,
+		"proof":     result.ProofPath,
+		"server":    result.Server,
+		"timestamp": result.Timestamp.Format(time.RFC3339),
+	})
+}
+
+// resolveContainer determines the container path from a request.
+// It checks for a multipart file upload first, then falls back to a "container" form field
+// referencing a file by name in the work directory.
 func resolveContainer(r *http.Request) (string, error) {
 	// Check for a named container in the work directory.
 	name := r.FormValue("container")

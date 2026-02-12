@@ -1,6 +1,18 @@
 // Copyright 2026 Benjamin Toso <benjamin.toso@gmail.com>
 // Licensed under the Apache License, Version 2.0
 
+// IMF (Immutable File) is a CLI tool for creating cryptographically sealed,
+// tamper-proof file containers. It uses Ed25519 signatures for integrity,
+// AES-256-GCM for optional encryption, and a ZIP-based format for portability.
+//
+// Typical workflow:
+//   imf keygen                              # Generate signing keys
+//   imf create archive.imf                  # Create empty container
+//   imf add archive.imf file1.pdf file2.txt # Add files
+//   imf seal archive.imf -key imf_private.pem -embed-pubkey  # Seal forever
+//   imf verify archive.imf                  # Verify integrity
+//   imf extract archive.imf -out ./output   # Extract files
+//   imf gui                                 # Or use the web-based GUI
 package main
 
 import (
@@ -22,6 +34,7 @@ Commands:
   list      List files in a container
   info      Show container metadata
   keygen    Generate an Ed25519 key pair
+  anchor    Anchor container hash to Bitcoin via OpenTimestamps
   gui       Launch the web-based graphical interface
 
 Run 'imf <command> -h' for command-specific help.
@@ -53,6 +66,8 @@ func main() {
 		runInfo()
 	case "keygen":
 		runKeygen()
+	case "anchor":
+		runAnchor()
 	case "gui":
 		runGUI()
 	case "help", "-h", "--help":

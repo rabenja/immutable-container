@@ -11,6 +11,10 @@ import (
 	"github.com/immutable-container/imf/pkg/container"
 )
 
+// runExtract handles the "imf extract" command.
+// Extracts files from a sealed container. If the container is encrypted,
+// the correct passphrase must be provided (interactively or via -passphrase flag).
+// Expired containers are blocked by default — use -ignore-expiry for forensic access.
 func runExtract() {
 	outputDir, passphrase, ignoreExpiry, containerPath := parseExtractArgs()
 
@@ -51,6 +55,8 @@ func runExtract() {
 	fmt.Printf("Extracted to %s\n", outputDir)
 }
 
+// parseExtractArgs manually parses extract command arguments.
+// Uses manual parsing because the container path is positional.
 func parseExtractArgs() (outputDir string, passphrase string, ignoreExpiry bool, containerPath string) {
 	outputDir = "."
 	args := os.Args[1:]

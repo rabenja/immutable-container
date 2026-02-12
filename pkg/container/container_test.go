@@ -1,6 +1,7 @@
 package container_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -274,4 +275,139 @@ func TestEmptySealRejected(t *testing.T) {
 		t.Fatal("expected error sealing empty container")
 	}
 	t.Log("✓ Empty seal rejected")
+}
+
+// TestTamperDetectionSingleBitFlip verifies that flipping a single bit anywhere
+// in the sealed container causes verification to fail. This is the core guarantee
+// of the IMF format: even 1 bit of tampering is detectable.
+func TestTamperDetectionSingleBitFlip(t *testing.T) {
+	tmpDir := t.TempDir()
+	imfPath := filepath.Join(tmpDir, "tamper-test.imf")
+
+	// Create and seal a container with a known file.
+	container.Create(imfPath)
+	testFile := filepath.Join(tmpDir, "secret.txt")
+	os.WriteFile(testFile, []byte("This content must remain untouched."), 0644)
+	container.Add(imfPath, []string{testFile})
+
+	kp, _ := imfcrypto.GenerateKeyPair()
+	container.Seal(imfPath, container.SealOptions{
+		PrivateKey:  kp.PrivateKey,
+		EmbedPubKey: true,
+		Passphrase:  "tamper-test",
+	})
+
+	// Verify it passes before tampering.
+	err := container.Verify(imfPath, container.VerifyOptions{})
+	if err != nil {
+		t.Fatalf("Pre-tamper verify failed: %v", err)
+	}
+	t.Log("✓ Container verifies before tampering")
+
+	// Read the sealed container bytes.
+	original, err := os.ReadFile(imfPath)
+	if err != nil {
+		t.Fatalf("Reading container: %v", err)
+	}
+
+	// Flip a single bit at multiple positions throughout the file.
+	// Test near the beginning, middle, and end to cover different sections
+	// (ZIP headers, file data, manifest, signature).
+	positions := []int{
+		50,                   // Near start (ZIP local file header area)
+		len(original) / 4,   // Quarter way through
+		len(original) / 2,   // Middle (likely in file data)
+		len(original) * 3/4, // Three quarters (likely in manifest/signature area)
+		len(original) - 50,  // Near end (ZIP central directory)
+	}
+
+	for _, pos := range positions {
+		if pos < 0 || pos >= len(original) {
+			continue
+		}
+
+		// Make a copy and flip one bit.
+		tampered := make([]byte, len(original))
+		copy(tampered, original)
+		tampered[pos] ^= 0x01 // Flip the lowest bit
+
+		// Write the tampered version.
+		tamperedPath := filepath.Join(tmpDir, fmt.Sprintf("tampered-bit-%d.imf", pos))
+		os.WriteFile(tamperedPath, tampered, 0644)
+
+		// Verification must fail.
+		err := container.Verify(tamperedPath, container.VerifyOptions{})
+		if err == nil {
+			t.Fatalf("SECURITY FAILURE: Verification passed after flipping bit at byte %d (file size: %d)", pos, len(original))
+		}
+		t.Logf("✓ Bit flip at byte %d/%d detected: %v", pos, len(original), err)
+	}
+}
+
+// TestTamperDetectionTruncation verifies that truncating the container is detected.
+func TestTamperDetectionTruncation(t *testing.T) {
+	tmpDir := t.TempDir()
+	imfPath := filepath.Join(tmpDir, "truncate-test.imf")
+
+	// Create and seal a container.
+	container.Create(imfPath)
+	testFile := filepath.Join(tmpDir, "data.txt")
+	os.WriteFile(testFile, []byte("Important data that must not be lost."), 0644)
+	container.Add(imfPath, []string{testFile})
+
+	kp, _ := imfcrypto.GenerateKeyPair()
+	container.Seal(imfPath, container.SealOptions{
+		PrivateKey:  kp.PrivateKey,
+		EmbedPubKey: true,
+	})
+
+	// Read original and truncate by removing the last 100 bytes.
+	original, _ := os.ReadFile(imfPath)
+	truncated := original[:len(original)-100]
+
+	truncPath := filepath.Join(tmpDir, "truncated.imf")
+	os.WriteFile(truncPath, truncated, 0644)
+
+	err := container.Verify(truncPath, container.VerifyOptions{})
+	if err == nil {
+		t.Fatal("SECURITY FAILURE: Verification passed on truncated container")
+	}
+	t.Logf("✓ Truncation detected: %v", err)
+}
+
+// TestTamperDetectionByteOverwrite verifies that overwriting a chunk of bytes is detected.
+func TestTamperDetectionByteOverwrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	imfPath := filepath.Join(tmpDir, "overwrite-test.imf")
+
+	// Create and seal.
+	container.Create(imfPath)
+	testFile := filepath.Join(tmpDir, "report.txt")
+	os.WriteFile(testFile, []byte("Quarterly results: revenue up 15%."), 0644)
+	container.Add(imfPath, []string{testFile})
+
+	kp, _ := imfcrypto.GenerateKeyPair()
+	container.Seal(imfPath, container.SealOptions{
+		PrivateKey:  kp.PrivateKey,
+		EmbedPubKey: true,
+		Passphrase:  "overwrite-test",
+	})
+
+	// Read and overwrite 16 bytes in the middle with zeros.
+	original, _ := os.ReadFile(imfPath)
+	tampered := make([]byte, len(original))
+	copy(tampered, original)
+	mid := len(tampered) / 2
+	for i := mid; i < mid+16 && i < len(tampered); i++ {
+		tampered[i] = 0x00
+	}
+
+	overwritePath := filepath.Join(tmpDir, "overwritten.imf")
+	os.WriteFile(overwritePath, tampered, 0644)
+
+	err := container.Verify(overwritePath, container.VerifyOptions{})
+	if err == nil {
+		t.Fatal("SECURITY FAILURE: Verification passed after overwriting 16 bytes")
+	}
+	t.Logf("✓ 16-byte overwrite detected: %v", err)
 }
