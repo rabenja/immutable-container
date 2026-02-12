@@ -303,8 +303,9 @@ function renderSB(){
   const aDiv=document.getElementById('sAnchor');
   if(cState==='sealed'){
     aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
-      '<div style="font-size:12px;color:var(--text-dim)">Not yet anchored</div>'+
-      '<div style="margin-top:8px;font-size:11px;color:var(--text-faint)">Click "Anchor to Bitcoin" to timestamp this container on the blockchain.</div>';
+      '<div style="font-size:12px;color:var(--text-dim)" id="anchorStatus">Checking...</div>';
+    // Check if an .ots proof already exists for this container
+    checkAnchorStatus();
   }else{aDiv.innerHTML='';}
 }
 
@@ -494,18 +495,78 @@ async function anchorContainer(){
   const r=await(await fetch('/api/anchor',{method:'POST',body:f})).json();
   if(r.success){
     toast('Anchored to Bitcoin!','success');
-    // Update sidebar with anchor info
-    const aDiv=document.getElementById('sAnchor');
-    if(aDiv){
-      aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
-        mr('Status','Submitted','good')+
-        mr('Hash',r.data.hash.substring(0,16)+'...')+
-        mr('Server',r.data.server.replace('https://',''))+
-        mr('Submitted',new Date(r.data.timestamp).toLocaleString())+
-        '<div style="margin-top:8px"><a href="/api/download?file='+encodeURIComponent(cName+'.ots')+'" class="tb success" style="font-size:11px;padding:4px 10px;text-decoration:none">Download .ots proof</a></div>';
-    }
+    showAnchorResult(r.data);
   }else{
     toast('Anchor failed: '+r.error,'error');
+  }
+}
+
+// Check if .ots proof exists and verify it
+async function checkAnchorStatus(){
+  const f=new FormData();f.append('container',cName);
+  try{
+    const r=await(await fetch('/api/anchor-verify',{method:'POST',body:f})).json();
+    if(r.success){
+      showAnchorVerified(r.data);
+    }else{
+      showAnchorNotFound();
+    }
+  }catch(e){showAnchorNotFound();}
+}
+
+// Show anchor result after submitting
+function showAnchorResult(data){
+  const aDiv=document.getElementById('sAnchor');
+  if(!aDiv)return;
+  aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
+    mr('Status','Submitted','good')+
+    mr('Hash',data.hash.substring(0,16)+'...')+
+    mr('Server',data.server.replace('https://',''))+
+    mr('Submitted',new Date(data.timestamp).toLocaleString())+
+    '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">'+
+      '<a href="/api/download?file='+encodeURIComponent(cName+'.ots')+'" class="tb success" style="font-size:11px;padding:4px 10px;text-decoration:none;text-align:center">Download .ots proof</a>'+
+      '<button class="tb" onclick="verifyAnchor()" style="font-size:11px;padding:4px 10px">Verify Anchor</button>'+
+    '</div>';
+}
+
+// Show verified anchor status
+function showAnchorVerified(data){
+  const aDiv=document.getElementById('sAnchor');
+  if(!aDiv)return;
+  aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
+    '<div class="verify-status pass" style="margin-bottom:10px">&#10003; Proof matches container</div>'+
+    mr('Hash',data.hash.substring(0,16)+'...')+
+    mr('Proof size',data.proof_size+' bytes')+
+    '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">'+
+      '<a href="/api/download?file='+encodeURIComponent(cName+'.ots')+'" class="tb success" style="font-size:11px;padding:4px 10px;text-decoration:none;text-align:center">Download .ots proof</a>'+
+      '<a href="https://opentimestamps.org" target="_blank" class="tb" style="font-size:11px;padding:4px 10px;text-decoration:none;text-align:center">Verify on Bitcoin &#8599;</a>'+
+    '</div>'+
+    '<div style="margin-top:8px;font-size:10px;color:var(--text-faint)">'+
+      'Drop your .ots file at opentimestamps.org for full Bitcoin block verification.'+
+    '</div>';
+}
+
+// Show when no anchor exists yet
+function showAnchorNotFound(){
+  const aDiv=document.getElementById('sAnchor');
+  if(!aDiv)return;
+  aDiv.innerHTML='<h4>Blockchain Anchor</h4>'+
+    '<div style="font-size:12px;color:var(--text-dim)">Not yet anchored</div>'+
+    '<div style="margin-top:6px;font-size:11px;color:var(--text-faint)">'+
+      'Click "&#9875; Anchor to Bitcoin" above to timestamp this container on the blockchain.'+
+    '</div>';
+}
+
+// Verify existing anchor
+async function verifyAnchor(){
+  toast('Verifying anchor proof...','info');
+  const f=new FormData();f.append('container',cName);
+  const r=await(await fetch('/api/anchor-verify',{method:'POST',body:f})).json();
+  if(r.success){
+    toast('Anchor verified — proof matches container','success');
+    showAnchorVerified(r.data);
+  }else{
+    toast('Anchor verification failed: '+r.error,'error');
   }
 }
 

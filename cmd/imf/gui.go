@@ -80,6 +80,7 @@ func runGUI() {
 	mux.HandleFunc("/api/serve-file", handleServeFile)
 	mux.HandleFunc("/api/upload-container", handleUploadContainer)
 	mux.HandleFunc("/api/anchor", handleAnchor)
+	mux.HandleFunc("/api/anchor-verify", handleAnchorVerify)
 
 	// Find an available port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -652,6 +653,34 @@ func handleAnchor(w http.ResponseWriter, r *http.Request) {
 		"proof":     result.ProofPath,
 		"server":    result.Server,
 		"timestamp": result.Timestamp.Format(time.RFC3339),
+	})
+}
+
+// handleAnchorVerify checks that an existing .ots proof matches the container.
+// Returns the hash and proof details if valid.
+func handleAnchorVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonError(w, "Method not allowed", 405)
+		return
+	}
+
+	containerPath, err := resolveContainer(r)
+	if err != nil {
+		jsonError(w, err.Error(), 400)
+		return
+	}
+
+	result, err := anchor.VerifyAnchor(containerPath)
+	if err != nil {
+		jsonError(w, err.Error(), 400)
+		return
+	}
+
+	jsonSuccess(w, "Anchor verified", map[string]interface{}{
+		"hash":       result.ContainerHash,
+		"proof_path": result.ProofPath,
+		"proof_size": result.ProofSize,
+		"matches":    result.HashMatches,
 	})
 }
 
