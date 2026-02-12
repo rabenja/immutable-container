@@ -181,6 +181,9 @@ body{font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sa
     </div>
     <div class="titlebar-actions" id="wsActions"></div>
   </div>
+  <div id="locBar" style="padding:4px 20px;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-faint);display:none">
+    &#128193; Saved at: <span id="locPath"></span>
+  </div>
   <div class="workspace-body">
     <div class="sidebar">
       <div class="sidebar-section" id="sMeta"></div>
@@ -256,6 +259,14 @@ function setKey(ok,txt){const e=document.getElementById('keyStatus');e.textConte
 async function enterWS(){
   document.getElementById('launchScreen').style.display='none';
   document.getElementById('workspace').classList.add('active');
+  // Show the file location bar
+  try{
+    const wd=await(await fetch('/api/workdir')).json();
+    if(wd.success){
+      document.getElementById('locPath').textContent=wd.data.path+'/'+cName;
+      document.getElementById('locBar').style.display='';
+    }
+  }catch(e){}
   renderWS();await refreshFiles();
   if(cState==='sealed')autoVerify();
 }

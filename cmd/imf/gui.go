@@ -45,18 +45,30 @@ type apiResponse struct {
 }
 
 // runGUI starts a local web server that serves the IMF graphical interface.
-// It creates a temporary working directory for the session, registers all
-// REST API routes, finds an available port on localhost, and opens the
-// user's default browser. All operations happen locally — the server only
-// listens on 127.0.0.1 and never exposes data to the network.
+// It creates a working directory on the user's Desktop for easy access to
+// created .imf files. Falls back to a temp directory if Desktop is not found.
+// Registers all REST API routes, finds an available port on localhost, and
+// opens the user's default browser. All operations happen locally — the server
+// only listens on 127.0.0.1 and never exposes data to the network.
 func runGUI() {
-	// Create a temporary working directory for this session.
-	workDir, err := os.MkdirTemp("", "imf-gui-*")
+	// Use the user's Desktop as the working directory so .imf files are
+	// easy to find. Fall back to a temp directory if Desktop doesn't exist.
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating work directory: %v\n", err)
-		os.Exit(1)
+		homeDir = os.TempDir()
 	}
-	state.WorkDir = workDir
+
+	desktopDir := filepath.Join(homeDir, "Desktop")
+	if info, err := os.Stat(desktopDir); err != nil || !info.IsDir() {
+		// No Desktop folder — try ~/Downloads, then fall back to temp.
+		desktopDir = filepath.Join(homeDir, "Downloads")
+		if info, err := os.Stat(desktopDir); err != nil || !info.IsDir() {
+			desktopDir, _ = os.MkdirTemp("", "imf-gui-*")
+		}
+	}
+	state.WorkDir = desktopDir
+	fmt.Printf("IMF working directory: %s\n", state.WorkDir)
+	fmt.Println("Created .imf files will appear here.")
 
 	mux := http.NewServeMux()
 
@@ -81,6 +93,7 @@ func runGUI() {
 	mux.HandleFunc("/api/upload-container", handleUploadContainer)
 	mux.HandleFunc("/api/anchor", handleAnchor)
 	mux.HandleFunc("/api/anchor-verify", handleAnchorVerify)
+	mux.HandleFunc("/api/workdir", handleWorkDir)
 
 	// Find an available port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -682,6 +695,12 @@ func handleAnchorVerify(w http.ResponseWriter, r *http.Request) {
 		"proof_size": result.ProofSize,
 		"matches":    result.HashMatches,
 	})
+}
+
+// handleWorkDir returns the current working directory path so the GUI can
+// show users where their .imf files are saved.
+func handleWorkDir(w http.ResponseWriter, r *http.Request) {
+	jsonSuccess(w, "", map[string]string{"path": state.WorkDir})
 }
 
 // resolveContainer determines the container path from a request.
