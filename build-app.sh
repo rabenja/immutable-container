@@ -1,117 +1,133 @@
 #!/bin/bash
-# Build IMF Viewer.app for macOS
-# Usage: ./build-app.sh
+# Build IMF Viewer using Tauri
+# Usage:
+#   ./build-app.sh              # Production build (signed + notarized on macOS)
+#   ./build-app.sh --dev        # Dev mode (hot reload)
+#   ./build-app.sh --target <triple>  # Cross-compile
 #
-# This creates "IMF Viewer.app" in the current directory.
-# The app registers itself as the handler for .imf files.
-# After building, drag it to /Applications and double-click any .imf file.
+# Prerequisites:
+#   - Go 1.22+
+#   - Rust (via rustup)
+#   - Tauri CLI: cargo install tauri-cli
 
 set -e
 
-APP_NAME="IMF Viewer"
-APP_DIR="${APP_NAME}.app"
-CONTENTS="${APP_DIR}/Contents"
-MACOS="${CONTENTS}/MacOS"
-RESOURCES="${CONTENTS}/Resources"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SIDECAR_DIR="${SCRIPT_DIR}/src-tauri/sidecar"
 
-echo "Building IMF Viewer.app..."
+# Detect platform
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)  GOARCH="amd64" ;;
+    arm64)   GOARCH="arm64" ;;
+    aarch64) GOARCH="arm64" ;;
+    *)       GOARCH="$ARCH" ;;
+esac
 
-# Clean previous build.
-rm -rf "${APP_DIR}"
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "$OS" in
+    darwin)  GOOS="darwin" ;;
+    mingw*|msys*|cygwin*) GOOS="windows" ;;
+    linux)   GOOS="linux" ;;
+    *)       GOOS="$OS" ;;
+esac
 
-# Create the .app bundle structure.
-mkdir -p "${MACOS}"
-mkdir -p "${RESOURCES}"
+echo "=== IMF Viewer Build ==="
+echo "Platform: $GOOS/$GOARCH"
+echo ""
 
-# Build the main imf binary (the actual tool).
-echo "  Compiling imf binary..."
-GOOS=darwin GOARCH=arm64 go build -o "${MACOS}/imf" ./cmd/imf/
-
-# Build the viewer wrapper (the .app entry point).
-echo "  Compiling viewer wrapper..."
-GOOS=darwin GOARCH=arm64 go build -o "${MACOS}/imf-viewer" ./cmd/viewer/
-
-# Copy the Info.plist.
-cp app/Info.plist "${CONTENTS}/Info.plist"
-
-# Generate a simple app icon using built-in tools.
-# Creates a blue shield with "IMF" text.
-if command -v sips &> /dev/null; then
-    echo "  Generating app icon..."
-    # Create icon using Python if available, otherwise skip.
-    python3 -c "
-import struct, zlib
-
-def create_png(width, height, pixels):
-    def chunk(chunk_type, data):
-        c = chunk_type + data
-        return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-    raw = b''
-    for y in range(height):
-        raw += b'\x00'  # filter: none
-        for x in range(width):
-            raw += pixels(x, y)
-    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
-
-def icon_pixel(x, y):
-    # 256x256 icon: blue rounded rectangle with white 'IMF' text
-    cx, cy = 128, 128
-    # Background: rounded rect
-    margin = 20
-    radius = 40
-    in_rect = margin <= x < 256-margin and margin <= y < 256-margin
-    # Simple corner rounding
-    corners = [(margin+radius, margin+radius), (256-margin-radius, margin+radius),
-               (margin+radius, 256-margin-radius), (256-margin-radius, 256-margin-radius)]
-    in_corner = False
-    for cx2, cy2 in corners:
-        if ((x < margin+radius or x >= 256-margin-radius) and
-            (y < margin+radius or y >= 256-margin-radius)):
-            dx, dy = x - cx2, y - cy2
-            if dx*dx + dy*dy > radius*radius:
-                in_rect = False
-    if not in_rect:
-        return bytes([0, 0, 0, 0])  # transparent
-    # Blue background
-    r, g, b = 26, 26, 46  # #1a1a2e
-    # White shield shape
-    sx, sy = 128, 138
-    shield_w, shield_h = 70, 80
-    if abs(x - sx) < shield_w and margin+40 < y < margin+40+shield_h*2:
-        # Shield tapering
-        progress = (y - (margin+40)) / (shield_h*2)
-        taper = shield_w * (1 - progress*progress)
-        if abs(x - sx) < taper:
-            r, g, b = 255, 255, 255
-            # Checkmark in shield
-            check_cx, check_cy = 128, 148
-            dx, dy = x - check_cx, y - check_cy
-            # Simple check mark region
-            if (-15 <= dx <= 0 and abs(dy - dx) < 6) or (0 <= dx <= 25 and abs(dy + dx*0.6) < 6):
-                r, g, b = 26, 26, 46
-    return bytes([r, g, b, 255])
-
-png = create_png(256, 256, icon_pixel)
-with open('${RESOURCES}/AppIcon.png', 'wb') as f:
-    f.write(png)
-print('  Icon created.')
-" 2>/dev/null || echo "  (Skipped icon generation — no Python3)"
+# Step 0: Generate macOS .icns icon if missing (requires macOS tools)
+if [ "$GOOS" = "darwin" ] && [ ! -f "$SCRIPT_DIR/src-tauri/icons/icon.icns" ]; then
+    echo "Step 0: Generating macOS icon..."
+    cd "$SCRIPT_DIR/src-tauri/icons"
+    mkdir -p icon.iconset
+    cp 32x32.png icon.iconset/icon_32x32.png
+    cp 128x128.png icon.iconset/icon_128x128.png
+    cp "128x128@2x.png" "icon.iconset/icon_128x128@2x.png"
+    sips -z 16 16 32x32.png --out icon.iconset/icon_16x16.png 2>/dev/null
+    sips -z 256 256 "128x128@2x.png" --out icon.iconset/icon_256x256.png 2>/dev/null
+    sips -z 512 512 "128x128@2x.png" --out icon.iconset/icon_512x512.png 2>/dev/null
+    iconutil -c icns icon.iconset -o icon.icns
+    rm -rf icon.iconset
+    echo "  Created icon.icns"
+    cd "$SCRIPT_DIR"
 fi
 
-# Create a simple PkgInfo file.
-echo -n "APPL????" > "${CONTENTS}/PkgInfo"
+# Step 1: Build the Go sidecar binary
+echo "Step 1: Building Go sidecar binary..."
+mkdir -p "$SIDECAR_DIR"
+
+BINARY_NAME="imf"
+if [ "$GOOS" = "windows" ]; then
+    BINARY_NAME="imf.exe"
+fi
+
+GOOS=$GOOS GOARCH=$GOARCH go build \
+    -ldflags="-s -w" \
+    -o "$SIDECAR_DIR/$BINARY_NAME" \
+    "$SCRIPT_DIR/cmd/imf/"
+
+echo "  Built: $SIDECAR_DIR/$BINARY_NAME"
+echo "  Size: $(du -h "$SIDECAR_DIR/$BINARY_NAME" | cut -f1)"
+
+# Step 2: Build with Tauri
+echo ""
+echo "Step 2: Building Tauri application..."
+
+if [ "$1" = "--dev" ]; then
+    echo "  Running in dev mode..."
+    cd "$SCRIPT_DIR/src-tauri"
+    cargo tauri dev
+else
+    cd "$SCRIPT_DIR/src-tauri"
+    
+    if [ "$1" = "--target" ] && [ -n "$2" ]; then
+        echo "  Target: $2"
+        cargo tauri build --target "$2"
+    else
+        cargo tauri build
+    fi
+fi
 
 echo ""
-echo "================================================"
-echo "  ${APP_NAME}.app built successfully!"
-echo "================================================"
-echo ""
-echo "To install:"
-echo "  1. Drag '${APP_NAME}.app' to /Applications"
-echo "  2. Double-click any .imf file — it opens in IMF Viewer"
-echo "  3. Or launch the app directly to create new containers"
-echo ""
-echo "To set as default app for .imf files:"
-echo "  Right-click any .imf file → Get Info → Open With →"
-echo "  Select 'IMF Viewer' → Click 'Change All'"
-echo ""
+echo "=== Build complete ==="
+
+# Step 3: macOS signing and notarization info
+if [ "$GOOS" = "darwin" ] && [ "$1" != "--dev" ]; then
+    APP_PATH=$(find "$SCRIPT_DIR/src-tauri/target" -name "IMF Viewer.app" -type d 2>/dev/null | head -1)
+    DMG_PATH=$(find "$SCRIPT_DIR/src-tauri/target" -name "*.dmg" 2>/dev/null | head -1)
+    
+    if [ -n "$APP_PATH" ]; then
+        echo ""
+        echo "=== macOS Distribution ==="
+        echo "App: $APP_PATH"
+        
+        if [ -n "$DMG_PATH" ]; then
+            echo "DMG: $DMG_PATH"
+        fi
+        
+        # Check if signing identity exists
+        if security find-identity -v -p codesigning 2>/dev/null | grep -q "3R489H66PC"; then
+            echo ""
+            echo "Signing identity found. Tauri should have signed automatically."
+            echo ""
+            echo "To notarize (required for distribution):"
+            echo "  xcrun notarytool submit \"$DMG_PATH\" \\"
+            echo "    --apple-id YOUR_APPLE_ID \\"
+            echo "    --team-id 3R489H66PC \\"
+            echo "    --password YOUR_APP_SPECIFIC_PASSWORD \\"
+            echo "    --wait"
+            echo ""
+            echo "  xcrun stapler staple \"$DMG_PATH\""
+        else
+            echo ""
+            echo "WARNING: No signing identity found for team 3R489H66PC."
+            echo "Install your Developer ID certificate from developer.apple.com."
+        fi
+    fi
+    
+    echo ""
+    echo "To install:"
+    echo "  1. Open the DMG and drag 'IMF Viewer' to /Applications"
+    echo "  2. Double-click any .imf file — it opens in IMF Viewer"
+fi

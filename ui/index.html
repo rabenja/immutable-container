@@ -1,20 +1,4 @@
-// Copyright 2026 Benjamin Toso <benjamin.toso@gmail.com>
-// Licensed under the Apache License, Version 2.0
-
-package main
-
-import "net/http"
-
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(indexHTML))
-}
-
-const indexHTML = `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -578,27 +562,6 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){document.getElementById('pvPane').classList.remove('active');selIdx=-1;renderFL()}
 });
 document.getElementById('createName').addEventListener('keydown',e=>{if(e.key==='Enter')doCreate()});
-
-// Auto-open: if launched with ?open=filename.imf, load that container automatically.
-// This is used by the Tauri wrapper when the app is launched by double-clicking an .imf file.
-(async function(){
-  const p=new URLSearchParams(window.location.search);
-  const autoOpen=p.get('open');
-  if(!autoOpen)return;
-  // The file has already been uploaded to the workdir by the Tauri wrapper.
-  // Just load it by name as if the user selected it.
-  try{
-    const f=new FormData();f.append('container',autoOpen);
-    const r=await(await fetch('/api/info',{method:'POST',body:f})).json();
-    if(!r.success){toast('Could not open '+autoOpen+': '+r.error,'error');return}
-    cName=autoOpen;cInfo=r.data;cState=cInfo.State;
-    if(cState==='sealed'){
-      const ef=new FormData();ef.append('container',cName);ef.append('passphrase','');ef.append('ignore_expiry','true');
-      await fetch('/api/extract',{method:'POST',body:ef});
-    }
-    enterWS();
-  }catch(e){console.error('Auto-open failed:',e)}
-})();
 </script>
 </body>
-</html>` + "`"
+</html>

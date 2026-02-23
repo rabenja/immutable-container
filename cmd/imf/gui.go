@@ -108,8 +108,10 @@ func runGUI() {
 	fmt.Printf("IMF GUI running at %s\n", url)
 	fmt.Println("Press Ctrl+C to stop")
 
-	// Open the browser automatically.
-	go openBrowser(url)
+	// Open the browser automatically (unless suppressed by Tauri wrapper).
+	if os.Getenv("IMF_NO_BROWSER") != "1" {
+		go openBrowser(url)
+	}
 
 	// Start the server.
 	http.Serve(listener, mux)

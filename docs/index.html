@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMF — Immutable File Container</title>
+<meta name="description" content="Cryptographically sealed archives for tamper-proof file storage. Open source, zero dependencies, blockchain-timestamped.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #FAFAF8;
+  --fg: #1a1a1a;
+  --fg2: #4a4a4a;
+  --fg3: #777;
+  --accent: #2B5A3D;
+  --accent-light: #3D7A54;
+  --accent-bg: #EEF4F0;
+  --border: #ddd;
+  --code-bg: #F0EFEB;
+  --mono: 'IBM Plex Mono', monospace;
+  --serif: 'Source Serif 4', Georgia, serif;
+}
+
+html { font-size: 17px; scroll-behavior: smooth; }
+body { 
+  font-family: var(--serif); 
+  color: var(--fg); 
+  background: var(--bg);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* NAV */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(250, 250, 248, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+}
+nav .inner {
+  max-width: 960px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px;
+}
+nav .logo {
+  font-family: var(--mono); font-weight: 600; font-size: 0.95rem;
+  color: var(--fg); letter-spacing: -0.02em;
+}
+nav .logo span { color: var(--accent); }
+nav .links { display: flex; gap: 1.8rem; }
+nav .links a { 
+  font-family: var(--mono); font-size: 0.78rem; 
+  color: var(--fg2); letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+nav .links a:hover { color: var(--accent); text-decoration: none; }
+
+/* HERO */
+.hero {
+  max-width: 960px; margin: 0 auto;
+  padding: 5rem 2rem 4rem;
+}
+.hero h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 2.8rem; line-height: 1.15;
+  letter-spacing: -0.03em;
+  margin-bottom: 1.5rem;
+  max-width: 680px;
+}
+.hero .subtitle {
+  font-size: 1.15rem; color: var(--fg2);
+  max-width: 560px; margin-bottom: 2.5rem;
+}
+.hero .actions {
+  display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+}
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-family: var(--mono); font-size: 0.82rem; font-weight: 500;
+  background: var(--accent); color: #fff;
+  padding: 0.7rem 1.5rem; border-radius: 6px;
+  transition: background 0.2s;
+  letter-spacing: 0.01em;
+}
+.btn-primary:hover { background: var(--accent-light); text-decoration: none; }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-family: var(--mono); font-size: 0.82rem; font-weight: 500;
+  color: var(--fg2); padding: 0.7rem 1.5rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.btn-primary svg, .btn-secondary svg { width: 16px; height: 16px; }
+
+.version-tag {
+  font-family: var(--mono); font-size: 0.72rem;
+  color: var(--fg3); margin-top: 1rem;
+}
+
+/* SECTIONS */
+section {
+  max-width: 960px; margin: 0 auto;
+  padding: 0 2rem;
+}
+.section-break {
+  border: none; border-top: 1px solid var(--border);
+  margin: 4rem 0;
+}
+
+h2 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 1.7rem; letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+}
+h3 {
+  font-family: var(--mono); font-weight: 600;
+  font-size: 0.85rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--accent);
+  margin-bottom: 0.6rem;
+}
+
+p + p { margin-top: 1rem; }
+
+/* WHAT IT DOES */
+.features {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+  margin-top: 2rem;
+}
+.feature {
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.feature .icon {
+  font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+  color: var(--accent); text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+}
+.feature p {
+  font-size: 0.95rem; color: var(--fg2); line-height: 1.6;
+}
+
+/* CODE BLOCK */
+.code-block {
+  background: #1a1a1a; color: #e0e0e0;
+  border-radius: 8px; padding: 1.5rem 2rem;
+  font-family: var(--mono); font-size: 0.82rem;
+  line-height: 1.8; overflow-x: auto;
+  margin: 2rem 0;
+}
+.code-block .comment { color: #6a9955; }
+.code-block .cmd { color: #dcdcaa; }
+.code-block .flag { color: #9cdcfe; }
+.code-block .output { color: #6a9955; font-style: italic; }
+
+/* HOW IT WORKS STEPS */
+.steps {
+  display: flex; flex-direction: column; gap: 1.5rem;
+  margin-top: 2rem;
+  counter-reset: step;
+}
+.step {
+  display: flex; gap: 1.2rem; align-items: flex-start;
+  counter-increment: step;
+}
+.step::before {
+  content: counter(step);
+  font-family: var(--mono); font-weight: 600;
+  font-size: 0.85rem; color: var(--accent);
+  background: var(--accent-bg);
+  min-width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+.step div { flex: 1; }
+.step strong { 
+  font-family: var(--mono); font-size: 0.85rem; font-weight: 600;
+  display: block; margin-bottom: 0.2rem;
+}
+.step p { font-size: 0.95rem; color: var(--fg2); margin: 0; }
+
+/* USE CASES */
+.use-cases {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem;
+  margin-top: 2rem;
+}
+.use-case {
+  padding: 1.5rem;
+  border-left: 3px solid var(--accent);
+  background: #fff;
+}
+.use-case h4 {
+  font-family: var(--mono); font-weight: 600;
+  font-size: 0.82rem; margin-bottom: 0.5rem;
+}
+.use-case p {
+  font-size: 0.9rem; color: var(--fg2); line-height: 1.55;
+}
+
+/* COMPARISON */
+.comparison {
+  width: 100%; border-collapse: collapse;
+  margin-top: 2rem; font-size: 0.9rem;
+}
+.comparison th {
+  font-family: var(--mono); font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  text-align: left; padding: 0.8rem 1rem;
+  border-bottom: 2px solid var(--fg);
+  color: var(--fg);
+}
+.comparison td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.comparison tr:last-child td { border-bottom: none; }
+.comparison td:first-child { 
+  font-family: var(--mono); font-size: 0.82rem; font-weight: 500;
+  color: var(--fg); 
+}
+.comparison td:nth-child(2), .comparison td:nth-child(3) { color: var(--fg2); }
+
+/* TECH SPEC */
+.spec-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden; margin-top: 1.5rem;
+  background: #fff;
+}
+.spec-item {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.spec-item:nth-child(even) { border-right: none; }
+.spec-item:nth-last-child(-n+2) { border-bottom: none; }
+.spec-label {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--fg3); margin-bottom: 0.2rem;
+}
+.spec-value {
+  font-size: 0.92rem; color: var(--fg);
+}
+
+/* FOOTER */
+footer {
+  max-width: 960px; margin: 0 auto;
+  padding: 3rem 2rem;
+  border-top: 1px solid var(--border);
+  margin-top: 4rem;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  flex-wrap: wrap; gap: 2rem;
+}
+footer .left {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--fg3);
+}
+footer .left a { color: var(--fg2); }
+footer .right {
+  display: flex; gap: 1.5rem;
+}
+footer .right a {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--fg2);
+}
+
+/* RESPONSIVE */
+@media (max-width: 700px) {
+  .hero h1 { font-size: 2rem; }
+  .features { grid-template-columns: 1fr; }
+  .use-cases { grid-template-columns: 1fr; }
+  .spec-grid { grid-template-columns: 1fr; }
+  .spec-item { border-right: none !important; }
+  .spec-item:last-child { border-bottom: none; }
+  nav .links { gap: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <div class="logo"><span>.imf</span> — Immutable File Container</div>
+    <div class="links">
+      <a href="#how">How It Works</a>
+      <a href="#compare">vs C2PA</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/btoso/immutable-container">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>Seal your files. Prove they're real.</h1>
+  <p class="subtitle">IMF is a cryptographically sealed archive format. Sign files with your key, hash them for tamper detection, and timestamp them on the Bitcoin blockchain. Open source. Zero dependencies.</p>
+  <div class="actions">
+    <a href="#download" class="btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Download for macOS
+    </a>
+    <a href="https://github.com/btoso/immutable-container" class="btn-secondary">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      View Source
+    </a>
+  </div>
+  <div class="version-tag">v1.1.0 · macOS (Apple Silicon) · Signed &amp; Notarized</div>
+</div>
+
+<section>
+  <hr class="section-break">
+
+  <h2>What's inside an .imf container</h2>
+  <p>An IMF container is a sealed archive. You put files in, seal it, and the result is cryptographically locked — signed, hashed, and optionally timestamped on the Bitcoin blockchain.</p>
+
+  <div class="features">
+    <div class="feature">
+      <div class="icon">Signature</div>
+      <p>Ed25519 digital signature ties the container to your identity. If someone else sealed it, the signature won't match your key.</p>
+    </div>
+    <div class="feature">
+      <div class="icon">Integrity</div>
+      <p>SHA-256 hash of every file. Change a single bit — in any file, in any metadata — and verification fails.</p>
+    </div>
+    <div class="feature">
+      <div class="icon">Timestamp</div>
+      <p>Bitcoin blockchain anchor via OpenTimestamps. Decentralized proof of when the container was sealed. No certificate authority, no annual fees.</p>
+    </div>
+    <div class="feature">
+      <div class="icon">Encryption</div>
+      <p>AES-256-GCM encryption (optional). For containers that need to stay private until you're ready to share.</p>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <hr class="section-break">
+
+  <h2>How it works</h2>
+
+  <div class="code-block">
+    <span class="comment"># Create a new container</span><br>
+    <span class="cmd">imf create</span> <span class="flag">photos-2026-02-23</span><br><br>
+    <span class="comment"># Add files</span><br>
+    <span class="cmd">imf add</span> <span class="flag">photos-2026-02-23 IMG_001.jpg IMG_002.jpg scene.mp4</span><br><br>
+    <span class="comment"># Seal it — signs with your key, hashes everything</span><br>
+    <span class="cmd">imf seal</span> <span class="flag">photos-2026-02-23</span><br><br>
+    <span class="comment"># Anchor to Bitcoin (optional, requires internet once)</span><br>
+    <span class="cmd">imf timestamp</span> <span class="flag">photos-2026-02-23.imf</span><br><br>
+    <span class="comment"># Verify — works offline, no account needed</span><br>
+    <span class="cmd">imf verify</span> <span class="flag">photos-2026-02-23.imf</span><br>
+    <span class="output"># ✓ Signature valid (key: 7f3a...b2c1)</span><br>
+    <span class="output"># ✓ All files intact (3 files, 0 modified)</span><br>
+    <span class="output"># ✓ Bitcoin anchor confirmed (block 883,241)</span>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div>
+        <strong>Create &amp; add files</strong>
+        <p>Photos, documents, video, audio — any file type. From any camera or device.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div>
+        <strong>Seal the container</strong>
+        <p>Your Ed25519 key signs the container. SHA-256 hashes lock every file. The result is a single .imf file.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div>
+        <strong>Anchor to Bitcoin</strong>
+        <p>The container's hash is submitted to the Bitcoin blockchain via OpenTimestamps. Confirmation takes a few hours. After that, the timestamp is permanent.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div>
+        <strong>Share and verify</strong>
+        <p>Send the .imf file to anyone. They open it in IMF Viewer and see the signature, file integrity check, and blockchain timestamp. No account or internet needed for verification.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <hr class="section-break">
+
+  <h2>Who uses this</h2>
+  <div class="use-cases">
+    <div class="use-case">
+      <h4>Journalism</h4>
+      <p>Seal raw photos at the end of each day. If the images are later questioned, the blockchain timestamp proves they existed in that exact state on that date.</p>
+    </div>
+    <div class="use-case">
+      <h4>Legal Evidence</h4>
+      <p>Photograph a scene, seal on a laptop before leaving. The cryptographic chain creates verifiable custody under Federal Rules of Evidence 902(13)–14.</p>
+    </div>
+    <div class="use-case">
+      <h4>Insurance</h4>
+      <p>Document damage and seal immediately. The timestamp proves the documentation existed before any repair work began.</p>
+    </div>
+    <div class="use-case">
+      <h4>Creative Work</h4>
+      <p>Seal work-in-progress at milestones. Each container is a timestamped proof of creation for IP disputes.</p>
+    </div>
+    <div class="use-case">
+      <h4>Whistleblowing</h4>
+      <p>Encrypt sensitive documents in a sealed container. The blockchain anchor proves they existed before the investigation started.</p>
+    </div>
+    <div class="use-case">
+      <h4>Any file, any time</h4>
+      <p>Contracts, research data, source code, medical records. If you need to prove a file existed unchanged at a point in time, IMF does it.</p>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <hr class="section-break">
+
+  <h2>IMF vs. C2PA</h2>
+  <p>C2PA is the industry standard for content provenance, backed by Adobe, Microsoft, Sony, and others. It's good work. But it covers a different part of the problem.</p>
+
+  <table class="comparison">
+    <thead>
+      <tr>
+        <th></th>
+        <th>C2PA</th>
+        <th>IMF</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Signs at capture</td>
+        <td>Yes, if hardware supports it</td>
+        <td>No — seals post-capture</td>
+      </tr>
+      <tr>
+        <td>Works with</td>
+        <td>Sony, Leica, Nikon (few models)</td>
+        <td>Any camera or device</td>
+      </tr>
+      <tr>
+        <td>Timestamp</td>
+        <td>TSA server (centralized)</td>
+        <td>Bitcoin blockchain</td>
+      </tr>
+      <tr>
+        <td>Survives sharing</td>
+        <td>No — metadata stripped by platforms</td>
+        <td>Yes — the container is the file</td>
+      </tr>
+      <tr>
+        <td>Trust model</td>
+        <td>X.509 certificates ($50–$500/yr)</td>
+        <td>Ed25519 keys (free)</td>
+      </tr>
+      <tr>
+        <td>Verify offline</td>
+        <td>Partial</td>
+        <td>Full</td>
+      </tr>
+      <tr>
+        <td>File types</td>
+        <td>Images, video, audio, docs</td>
+        <td>Anything</td>
+      </tr>
+      <tr>
+        <td>Proves device origin</td>
+        <td>Yes</td>
+        <td>No — proves who sealed, and when</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top: 1.5rem; color: var(--fg2); font-style: italic;">They're not competing standards. C2PA proves the camera. IMF proves custody and time. A photo with both has the strongest provenance story you can build.</p>
+</section>
+
+<section>
+  <hr class="section-break">
+
+  <h2>Technical details</h2>
+  <div class="spec-grid">
+    <div class="spec-item">
+      <div class="spec-label">Language</div>
+      <div class="spec-value">Go — zero external dependencies</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">Signatures</div>
+      <div class="spec-value">Ed25519</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">Hashing</div>
+      <div class="spec-value">SHA-256 (per-file)</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">Encryption</div>
+      <div class="spec-value">AES-256-GCM (optional)</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">Timestamping</div>
+      <div class="spec-value">OpenTimestamps → Bitcoin</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">Container format</div>
+      <div class="spec-value">ZIP-based with sealed manifest</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">License</div>
+      <div class="spec-value">Apache 2.0</div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">Platforms</div>
+      <div class="spec-value">macOS (signed/notarized), Linux, Windows</div>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <hr class="section-break">
+
+  <h2>Download</h2>
+  <p style="margin-bottom: 1.5rem;">IMF Viewer is a native macOS app. Double-click any .imf file and it opens. Signed and notarized by Apple.</p>
+
+  <div class="actions" style="margin-bottom: 1.5rem;">
+    <a href="https://github.com/btoso/immutable-container/releases" class="btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Download IMF Viewer for macOS
+    </a>
+    <a href="https://github.com/btoso/immutable-container" class="btn-secondary">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      CLI &amp; Source on GitHub
+    </a>
+  </div>
+
+  <p style="color: var(--fg3); font-size: 0.9rem;">The CLI runs on macOS, Linux, and Windows. Install with <code style="background: var(--code-bg); padding: 0.15rem 0.4rem; border-radius: 3px; font-family: var(--mono); font-size: 0.82rem;">go install github.com/btoso/immutable-container/cmd/imf@latest</code></p>
+</section>
+
+<footer>
+  <div class="left">
+    Built by <a href="https://github.com/btoso">Benjamin Toso</a><br>
+    Apache 2.0 · Open Source
+  </div>
+  <div class="right">
+    <a href="https://github.com/btoso/immutable-container">GitHub</a>
+    <a href="https://github.com/btoso/immutable-container/blob/main/README.md">Docs</a>
+    <a href="https://github.com/btoso/immutable-container/releases">Releases</a>
+  </div>
+</footer>
+
+</body>
+</html>
