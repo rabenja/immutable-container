@@ -153,6 +153,9 @@ fn main() {
                     || url.scheme() == "tauri"
                     || url.scheme() == "about"
             })
+            // Disable Tauri's native drag-drop handler so HTML5 drag-drop
+            // in the Go web GUI works normally (for adding files to containers).
+            .disable_drag_drop_handler()
             .build()?;
 
             Ok(())
